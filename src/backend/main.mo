@@ -73,12 +73,33 @@ actor {
     email : Text;
   };
 
+
+  public type DiscountType = {
+    #percentage; // e.g. 10 means 10%
+    #flat;       // e.g. 100 means 100 rupees off
+  };
+
+  public type DiscountCoupon = {
+    code : Text;
+    discountType : DiscountType;
+    value : Nat; // percentage (1-100) or flat amount
+    isActive : Bool;
+  };
+
+  public type CouponResult = {
+    valid : Bool;
+    discountAmount : Nat;
+    message : Text;
+  };
+
   // State
   let products = Map.empty<Nat, Product>();
   let userCarts = Map.empty<Principal, List.List<CartItem>>();
   let orders = Map.empty<Nat, Order>();
   let resellerCatalogs = Map.empty<Principal, ResellerCatalog>();
   let userProfiles = Map.empty<Principal, UserProfile>();
+
+  let coupons = Map.empty<Text, DiscountCoupon>();
 
   var nextProductId = 1;
   var nextOrderId = 1;
@@ -546,4 +567,144 @@ actor {
     };
     blob;
   };
+
+  // Coupon Management (Admin only)
+  public shared ({ caller }) func createCoupon(code : Text, discountType : DiscountType, value : Nat) : async DiscountCoupon {
+    if (not (AccessControl.hasPermission(accessControlState, caller, #admin))) {
+      Runtime.trap("Unauthorized: Only admins can create coupons");
+    };
+    if (value == 0) {
+      Runtime.trap("Discount value must be greater than 0");
+    };
+    if (discountType == #percentage and value > 100) {
+      Runtime.trap("Percentage discount cannot exceed 100");
+    };
+    let coupon : DiscountCoupon = {
+      code = code.toUpper();
+      discountType;
+      value;
+      isActive = true;
+    };
+    coupons.add(code.toUpper(), coupon);
+    coupon;
+  };
+
+  public shared ({ caller }) func deleteCoupon(code : Text) : async () {
+    if (not (AccessControl.hasPermission(accessControlState, caller, #admin))) {
+      Runtime.trap("Unauthorized: Only admins can delete coupons");
+    };
+    coupons.remove(code.toUpper());
+  };
+
+  public query ({ caller }) func listCoupons() : async [DiscountCoupon] {
+    if (not (AccessControl.hasPermission(accessControlState, caller, #admin))) {
+      Runtime.trap("Unauthorized: Only admins can list coupons");
+    };
+    coupons.values().toArray();
+  };
+
+  public query func validateCoupon(code : Text, cartTotal : Nat) : async CouponResult {
+    switch (coupons.get(code.toUpper())) {
+      case (null) {
+        { valid = false; discountAmount = 0; message = "Invalid coupon code" };
+      };
+      case (?coupon) {
+        if (not coupon.isActive) {
+          { valid = false; discountAmount = 0; message = "Coupon is no longer active" };
+        } else {
+          let discountAmount = switch (coupon.discountType) {
+            case (#percentage) { (cartTotal * coupon.value) / 100 };
+            case (#flat) { if (coupon.value > cartTotal) { cartTotal } else { coupon.value } };
+          };
+          { valid = true; discountAmount; message = "Coupon applied successfully!" };
+        };
+      };
+    };
+  };
+
+  public shared ({ caller }) func placeOrderWithCoupon(couponCode : ?Text) : async Order {
+    if (not (AccessControl.hasPermission(accessControlState, caller, #user))) {
+      Runtime.trap("Unauthorized: Only users can place orders");
+    };
+
+    let cart = switch (userCarts.get(caller)) {
+      case (null) { Runtime.trap("Cart is empty") };
+      case (?cart) { cart };
+    };
+
+    let items = cart.toArray();
+
+    if (items.size() == 0) {
+      Runtime.trap("Cart is empty");
+    };
+
+    var totalAmount = 0;
+    for (item in items.vals()) {
+      let product = switch (products.get(item.productId)) {
+        case (null) { Runtime.trap("Product not found: " # item.productId.toText()) };
+        case (?p) { p };
+      };
+      if (not product.isActive) {
+        Runtime.trap("Product is not active: " # product.name);
+      };
+      if (product.stock < item.quantity) {
+        Runtime.trap("Insufficient stock for: " # product.name);
+      };
+      totalAmount += item.quantity * product.price;
+    };
+
+    // Apply coupon discount
+    let finalAmount = switch (couponCode) {
+      case (null) { totalAmount };
+      case (?code) {
+        switch (coupons.get(code.toUpper())) {
+          case (null) { totalAmount };
+          case (?coupon) {
+            if (coupon.isActive) {
+              let discount = switch (coupon.discountType) {
+                case (#percentage) { (totalAmount * coupon.value) / 100 };
+                case (#flat) { if (coupon.value > totalAmount) { totalAmount } else { coupon.value } };
+              };
+              if (discount > totalAmount) { 0 } else { totalAmount - discount };
+            } else { totalAmount };
+          };
+        };
+      };
+    };
+
+    let order : Order = {
+      id = nextOrderId;
+      buyer = caller;
+      items = items;
+      totalAmount = finalAmount;
+      status = #pending;
+      timestamp = Time.now();
+    };
+
+    orders.add(nextOrderId, order);
+    nextOrderId += 1;
+
+    for (item in items.vals()) {
+      let product = switch (products.get(item.productId)) {
+        case (null) { Runtime.trap("Product not found") };
+        case (?p) { p };
+      };
+      let updatedProduct = {
+        id = product.id;
+        name = product.name;
+        description = product.description;
+        price = product.price;
+        category = product.category;
+        image = product.image;
+        stock = if (product.stock >= item.quantity) { product.stock - item.quantity } else { 0 };
+        seller = product.seller;
+        isActive = product.isActive;
+      };
+      products.add(item.productId, updatedProduct);
+    };
+
+    userCarts.remove(caller);
+    order;
+  };
+
 };

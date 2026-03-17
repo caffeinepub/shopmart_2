@@ -63,6 +63,21 @@ export enum UserRole {
     user = "user",
     guest = "guest"
 }
+export interface DiscountCoupon {
+    code: string;
+    discountType: DiscountType;
+    value: bigint;
+    isActive: boolean;
+}
+export interface CouponResult {
+    valid: boolean;
+    discountAmount: bigint;
+    message: string;
+}
+export enum DiscountType {
+    percentage = "percentage",
+    flat = "flat"
+}
 export interface backendInterface {
     addToCart(productId: bigint, quantity: bigint): Promise<Array<CartItem>>;
     addToResellerCatalog(productId: bigint): Promise<void>;
@@ -90,4 +105,10 @@ export interface backendInterface {
     updateOrderStatus(orderId: bigint, status: OrderStatus): Promise<void>;
     updateProduct(id: bigint, name: string, description: string, price: bigint, category: Category, image: ExternalBlob | null, stock: bigint, isActive: boolean): Promise<void>;
     uploadImage(blob: ExternalBlob): Promise<ExternalBlob>;
+    createCoupon(code: string, discountType: DiscountType, value: bigint): Promise<DiscountCoupon>;
+    deleteCoupon(code: string): Promise<void>;
+    listCoupons(): Promise<Array<DiscountCoupon>>;
+    validateCoupon(code: string, cartTotal: bigint): Promise<CouponResult>;
+    placeOrderWithCoupon(couponCode: string | null): Promise<Order>;
+
 }

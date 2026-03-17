@@ -3,6 +3,25 @@ import type { Category, OrderStatus } from "../backend";
 import type { UserProfile } from "../backend";
 import { useActor } from "./useActor";
 
+// DiscountType is defined here since backend.ts is auto-generated and may not include it yet
+export enum DiscountType {
+  percentage = "percentage",
+  flat = "flat",
+}
+
+export interface DiscountCoupon {
+  code: string;
+  discountType: DiscountType;
+  value: bigint;
+  isActive: boolean;
+}
+
+export interface CouponResult {
+  valid: boolean;
+  discountAmount: bigint;
+  message: string;
+}
+
 export function useListProducts() {
   const { actor, isFetching } = useActor();
   return useQuery({
@@ -118,6 +137,21 @@ export function usePlaceOrder() {
     mutationFn: async () => {
       if (!actor) throw new Error("Not connected");
       return actor.placeOrder();
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["cart"] });
+      qc.invalidateQueries({ queryKey: ["orders"] });
+    },
+  });
+}
+
+export function usePlaceOrderWithCoupon() {
+  const { actor } = useActor();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (couponCode: string | null) => {
+      if (!actor) throw new Error("Not connected");
+      return (actor as any).placeOrderWithCoupon(couponCode);
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["cart"] });
@@ -268,6 +302,67 @@ export function useDeleteProduct() {
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["products"] });
+    },
+  });
+}
+
+export function useListCoupons() {
+  const { actor, isFetching } = useActor();
+  return useQuery<DiscountCoupon[]>({
+    queryKey: ["coupons"],
+    queryFn: async () => {
+      if (!actor) return [];
+      return (actor as any).listCoupons();
+    },
+    enabled: !!actor && !isFetching,
+  });
+}
+
+export function useCreateCoupon() {
+  const { actor } = useActor();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (data: {
+      code: string;
+      discountType: DiscountType;
+      value: bigint;
+    }) => {
+      if (!actor) throw new Error("Not connected");
+      return (actor as any).createCoupon(
+        data.code,
+        data.discountType,
+        data.value,
+      );
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["coupons"] });
+    },
+  });
+}
+
+export function useDeleteCoupon() {
+  const { actor } = useActor();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (code: string) => {
+      if (!actor) throw new Error("Not connected");
+      return (actor as any).deleteCoupon(code);
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["coupons"] });
+    },
+  });
+}
+
+export function useValidateCoupon() {
+  const { actor } = useActor();
+  return useMutation({
+    mutationFn: async ({
+      code,
+      cartTotal,
+    }: { code: string; cartTotal: bigint }): Promise<CouponResult> => {
+      if (!actor) throw new Error("Not connected");
+      return (actor as any).validateCoupon(code, cartTotal);
     },
   });
 }

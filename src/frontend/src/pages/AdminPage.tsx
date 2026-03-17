@@ -20,7 +20,7 @@ import {
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
-import { Package, Plus, ShieldOff, Trash2 } from "lucide-react";
+import { Package, Percent, Plus, ShieldOff, Tag, Trash2 } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
 import { Category, OrderStatus } from "../backend";
@@ -28,10 +28,14 @@ import type { Product } from "../backend";
 import { MOCK_PRODUCTS, formatPrice } from "../data/mockProducts";
 import { useInternetIdentity } from "../hooks/useInternetIdentity";
 import {
+  DiscountType,
   useAllOrders,
+  useCreateCoupon,
   useCreateProduct,
+  useDeleteCoupon,
   useDeleteProduct,
   useIsAdmin,
+  useListCoupons,
   useListProducts,
   useUpdateOrderStatus,
 } from "../hooks/useQueries";
@@ -74,9 +78,12 @@ export function AdminPage() {
   const { data: backendProducts, isLoading: productsLoading } =
     useListProducts();
   const { data: allOrders, isLoading: ordersLoading } = useAllOrders();
+  const { data: coupons, isLoading: couponsLoading } = useListCoupons();
   const updateOrderStatus = useUpdateOrderStatus();
   const createProduct = useCreateProduct();
   const deleteProduct = useDeleteProduct();
+  const createCoupon = useCreateCoupon();
+  const deleteCoupon = useDeleteCoupon();
 
   const [addOpen, setAddOpen] = useState(false);
   const [newProduct, setNewProduct] = useState({
@@ -85,6 +92,12 @@ export function AdminPage() {
     price: "",
     category: Category.fashion,
     stock: "",
+  });
+
+  const [newCoupon, setNewCoupon] = useState({
+    code: "",
+    discountType: DiscountType.percentage,
+    value: "",
   });
 
   const products =
@@ -172,6 +185,38 @@ export function AdminPage() {
     }
   };
 
+  const handleCreateCoupon = async () => {
+    if (!newCoupon.code.trim() || !newCoupon.value) {
+      toast.error("Please fill all required fields");
+      return;
+    }
+    try {
+      await createCoupon.mutateAsync({
+        code: newCoupon.code.trim().toUpperCase(),
+        discountType: newCoupon.discountType,
+        value: BigInt(Math.round(Number.parseFloat(newCoupon.value))),
+      });
+      toast.success("Coupon created!");
+      setNewCoupon({
+        code: "",
+        discountType: DiscountType.percentage,
+        value: "",
+      });
+    } catch {
+      toast.error("Failed to create coupon");
+    }
+  };
+
+  const handleDeleteCoupon = async (code: string) => {
+    if (!confirm(`Delete coupon "${code}"?`)) return;
+    try {
+      await deleteCoupon.mutateAsync(code);
+      toast.success("Coupon deleted");
+    } catch {
+      toast.error("Failed to delete coupon");
+    }
+  };
+
   return (
     <main className="max-w-5xl mx-auto px-4 py-6">
       <div className="flex items-center justify-between mb-6">
@@ -188,6 +233,9 @@ export function AdminPage() {
           </TabsTrigger>
           <TabsTrigger value="orders" data-ocid="admin.orders.tab">
             Orders
+          </TabsTrigger>
+          <TabsTrigger value="coupons" data-ocid="admin.coupons.tab">
+            Coupons
           </TabsTrigger>
         </TabsList>
 
@@ -411,6 +459,160 @@ export function AdminPage() {
                       ))}
                     </SelectContent>
                   </Select>
+                </div>
+              ))}
+            </div>
+          )}
+        </TabsContent>
+
+        {/* Coupons Tab */}
+        <TabsContent value="coupons">
+          {/* Create Coupon Form */}
+          <div className="bg-card rounded-xl p-5 shadow-card mb-5">
+            <h3 className="font-semibold text-base mb-4 flex items-center gap-2">
+              <Tag className="w-4 h-4 text-primary" />
+              Create New Coupon
+            </h3>
+            <div className="grid sm:grid-cols-3 gap-3">
+              <div>
+                <Label className="text-xs text-muted-foreground mb-1 block">
+                  Coupon Code *
+                </Label>
+                <Input
+                  value={newCoupon.code}
+                  onChange={(e) =>
+                    setNewCoupon((p) => ({
+                      ...p,
+                      code: e.target.value.toUpperCase(),
+                    }))
+                  }
+                  placeholder="e.g. SAVE20"
+                  className="uppercase"
+                  data-ocid="admin.coupons.code_input"
+                />
+              </div>
+              <div>
+                <Label className="text-xs text-muted-foreground mb-1 block">
+                  Discount Type *
+                </Label>
+                <Select
+                  value={newCoupon.discountType}
+                  onValueChange={(v) =>
+                    setNewCoupon((p) => ({
+                      ...p,
+                      discountType: v as DiscountType,
+                    }))
+                  }
+                >
+                  <SelectTrigger data-ocid="admin.coupons.type_select">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value={DiscountType.percentage}>
+                      <div className="flex items-center gap-2">
+                        <Percent className="w-3.5 h-3.5" /> Percentage (%)
+                      </div>
+                    </SelectItem>
+                    <SelectItem value={DiscountType.flat}>
+                      <div className="flex items-center gap-2">
+                        ₹ Flat Amount
+                      </div>
+                    </SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <Label className="text-xs text-muted-foreground mb-1 block">
+                  Value *{" "}
+                  {newCoupon.discountType === DiscountType.percentage
+                    ? "(%)"
+                    : "(₹)"}
+                </Label>
+                <Input
+                  type="number"
+                  value={newCoupon.value}
+                  onChange={(e) =>
+                    setNewCoupon((p) => ({ ...p, value: e.target.value }))
+                  }
+                  placeholder={
+                    newCoupon.discountType === DiscountType.percentage
+                      ? "e.g. 20"
+                      : "e.g. 100"
+                  }
+                  data-ocid="admin.coupons.value_input"
+                />
+              </div>
+            </div>
+            <Button
+              className="mt-4 bg-primary text-white gap-2"
+              onClick={handleCreateCoupon}
+              disabled={createCoupon.isPending}
+              data-ocid="admin.coupons.create.submit_button"
+            >
+              <Plus className="w-4 h-4" />
+              {createCoupon.isPending ? "Creating..." : "Create Coupon"}
+            </Button>
+          </div>
+
+          {/* Coupons List */}
+          {couponsLoading ? (
+            <div className="space-y-3" data-ocid="coupons.loading_state">
+              {["s1", "s2"].map((k) => (
+                <Skeleton key={k} className="h-16 w-full rounded-xl" />
+              ))}
+            </div>
+          ) : !coupons || coupons.length === 0 ? (
+            <div
+              className="text-center py-10"
+              data-ocid="admin.coupons.empty_state"
+            >
+              <Tag className="w-10 h-10 mx-auto mb-3 text-muted-foreground" />
+              <p className="text-muted-foreground text-sm">
+                No coupons yet. Create your first coupon above.
+              </p>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {coupons.map((coupon, index) => (
+                <div
+                  key={coupon.code}
+                  className="bg-card rounded-xl p-4 shadow-card flex items-center gap-4"
+                  data-ocid={`admin.coupons.item.${index + 1}`}
+                >
+                  <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
+                    <Tag className="w-5 h-5 text-primary" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="font-bold text-sm tracking-wide">
+                      {coupon.code}
+                    </p>
+                    <div className="flex items-center gap-2 mt-1">
+                      <Badge variant="outline" className="text-xs">
+                        {coupon.discountType === DiscountType.percentage
+                          ? `${coupon.value.toString()}% off`
+                          : `₹${coupon.value.toString()} off`}
+                      </Badge>
+                      <Badge
+                        className={`text-xs ${
+                          coupon.isActive
+                            ? "bg-green-100 text-green-700 border-green-200"
+                            : "bg-gray-100 text-gray-500 border-gray-200"
+                        }`}
+                        variant="outline"
+                      >
+                        {coupon.isActive ? "Active" : "Inactive"}
+                      </Badge>
+                    </div>
+                  </div>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="text-destructive hover:text-destructive"
+                    onClick={() => handleDeleteCoupon(coupon.code)}
+                    data-ocid={`admin.coupons.delete_button.${index + 1}`}
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </Button>
                 </div>
               ))}
             </div>
