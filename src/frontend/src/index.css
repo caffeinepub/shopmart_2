@@ -1,0 +1,72 @@
+@import url("https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400;12..96,600;12..96,700;12..96,800&family=Figtree:wght@300;400;500;600;700&display=swap");
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 1 0 0;
+    --foreground: 0.15 0.02 270;
+    --card: 1 0 0;
+    --card-foreground: 0.15 0.02 270;
+    --popover: 1 0 0;
+    --popover-foreground: 0.15 0.02 270;
+    --primary: 0.58 0.26 350;
+    --primary-foreground: 1 0 0;
+    --secondary: 0.97 0.01 350;
+    --secondary-foreground: 0.58 0.26 350;
+    --muted: 0.96 0.005 280;
+    --muted-foreground: 0.5 0.02 270;
+    --accent: 0.78 0.16 55;
+    --accent-foreground: 0.15 0.04 55;
+    --destructive: 0.55 0.24 27;
+    --destructive-foreground: 1 0 0;
+    --border: 0.92 0.01 280;
+    --input: 0.92 0.01 280;
+    --ring: 0.58 0.26 350;
+    --radius: 0.75rem;
+    --chart-1: 0.58 0.26 350;
+    --chart-2: 0.78 0.16 55;
+    --chart-3: 0.65 0.2 145;
+    --chart-4: 0.6 0.22 240;
+    --chart-5: 0.7 0.18 310;
+    --sidebar: 0.98 0.005 280;
+    --sidebar-foreground: 0.15 0.02 270;
+    --sidebar-primary: 0.58 0.26 350;
+    --sidebar-primary-foreground: 1 0 0;
+    --sidebar-accent: 0.95 0.02 350;
+    --sidebar-accent-foreground: 0.58 0.26 350;
+    --sidebar-border: 0.92 0.01 280;
+    --sidebar-ring: 0.58 0.26 350;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-background text-foreground font-body;
+  }
+  h1,
+  h2,
+  h3,
+  h4 {
+    @apply font-display;
+  }
+}
+
+@layer utilities {
+  .product-card-hover {
+    @apply transition-all duration-300 hover:shadow-product hover:-translate-y-1;
+  }
+
+  .category-pill-active {
+    @apply bg-primary text-primary-foreground shadow-md scale-105;
+  }
+
+  .price-tag {
+    @apply text-primary font-bold font-display;
+  }
+}
